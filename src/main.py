@@ -6,9 +6,18 @@ import wave
 import struct
 import numpy
 import csv
-import sys
+import pandas as pd
 from pydub import AudioSegment
 import os
+from pprint import pprint as pp
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import normalize
+import warnings
+from ggplot import *
+import matplotlib.pyplot as plt
+
+warnings.simplefilter("ignore", category=RuntimeWarning)
+
 
 def read_wav(wav_file):
     """Returns two chunks of sound data from wave file."""
@@ -33,7 +42,6 @@ def compute_chunk_features(mp3_file):
     sound.export(out_file, format="wav")
     # Read in chunks of data from WAV file
     wav_data1, wav_data2 = read_wav(out_file)
-    # We'll cover how the features are computed in the next section!
     return features(wav_data1), features(wav_data2)
 
 def moments(x):
@@ -78,30 +86,69 @@ def features(x):
     f.extend(fftfeatures(x))
     return f
 
+def dim_reduction(features):
+    pca = PCA(n_components=2)
+    red_data =  pca.fit_transform(features)
+
+    return red_data
+
 # Main script starts here
 # =======================
 
 if __name__ == '__main__':
-    aud_dir = '../data/'
+    aud_dir = '../babylon/'
+    file_names, features1, features2 = [], [], []
+
     for path, dirs, files in os.walk(aud_dir):
         for f in files:
-            if not f.endswith('.mp3'):
+            file_names.append(f)
+            if f.endswith('.mp3'):
                 # Skip any non-MP3 files
-                continue
-            mp3_file = os.path.join(path, f)
+                # continue
+                mp3_file = os.path.join(path, f)
 
-            # Extract the track name (i.e. the file name) plus the names
-            # of the two preceding directories. This will be useful
-            # later for plotting.
-            tail, track = os.path.split(mp3_file)
-            tail, dir1 = os.path.split(tail)
-            tail, dir2 = os.path.split(tail)
+                # Extract the track name (i.e. the file name) plus the names
+                # of the two preceding directories. This will be useful
+                # later for plotting.
+                tail, track = os.path.split(mp3_file)
+                tail, dir1 = os.path.split(tail)
+                tail, dir2 = os.path.split(tail)
 
-            # Compute features. feature_vec1 and feature_vec2 are lists of floating
-            # point numbers representing the statistical features we have extracted
-            # from the raw sound data.
-            try:
-                feature_vec1, feature_vec2 = compute_chunk_features(mp3_file)
-            #  
-            except:
-                continue
+                # Compute features. feature_vec1 and feature_vec2 are lists of floating
+                # point numbers representing the statistical features we have extracted
+                # from the raw sound data.
+                try:
+                    feature_vec1, feature_vec2 = compute_chunk_features(mp3_file)
+                    features1.append(feature_vec1)
+                    features2.append(feature_vec2)
+                except:
+                    continue
+    file_names = filter(lambda x: x.endswith('.mp3'), file_names)
+    df = pd.DataFrame(index=file_names, columns={'Features1', 'Features2'})
+
+    print(len(file_names), len(features1), len(features2), '\n')
+
+    df['Features1'] = features1
+    df['Features2'] = features2
+
+    features1 /= numpy.max(numpy.abs(features1),axis=0)
+    features2 /= numpy.max(numpy.abs(features2),axis=0)
+
+
+    red_feat1 = numpy.asarray(dim_reduction(features1))
+    red_feat2 = numpy.asarray(dim_reduction(features2))
+
+    print(red_feat1)
+    print
+    print(red_feat2)
+
+    x = red_feat1[:, 0]
+    y = red_feat1[:, 1]
+
+    df_plot = pd.DataFrame(red_feat1, index = file_names, columns={'x', 'y'})
+
+
+    print(df_plot)
+
+    print ggplot(df_plot, aes('x', 'y')) + geom_point(color = 'red') + ggtitle('Features1') + xlab('PC1') + ylab('PC2')
+
